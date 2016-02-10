@@ -1,0 +1,3 @@
+[submodule "conrad"]
+	path = conrad
+	url = https://github.com/bungun/conrad
