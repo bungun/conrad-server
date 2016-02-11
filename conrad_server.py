@@ -92,7 +92,7 @@ passwords = {}
 
 def __add_user(name, password):
     global user_names, users, passwords
-    if user in user_names: return False
+    if name in user_names: return False
 
     user_names.append(name)
     users[name] = User(name)
@@ -313,7 +313,7 @@ def add_dvh_constraint():
     fraction = json_dict.pop('fraction', None)
     direction = json_dict.pop('direction', None)
 
-    label = val.validate_structure_label(label):
+    label = val.validate_structure_label(label)
     if isinstance(label, dict):
         return jsonify(success = False, message = label['message'])
 
@@ -407,7 +407,7 @@ def change_objective():
 
     label = json_dict.pop('structureLabel', None)
 
-    label = val.validate_structure_label(label):
+    label = val.validate_structure_label(label)
     if isinstance(label, dict):
         return jsonify(success = False, message = label['message'])
 

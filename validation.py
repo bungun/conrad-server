@@ -30,7 +30,7 @@ class InputValidator(object):
                 out['message'] += 'no label provided\n'
             if not label.isdigit:
                 out['message'] += 'label is not integer\n'
-            else
+            else:
                 label = int(label)
 
             if not label in self.case.structures:
