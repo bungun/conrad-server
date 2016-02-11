@@ -1,7 +1,6 @@
 import sys
 from os import path
 
-#TODO: Data validation
 # TODO: eventually replace conrad submodule with installed conrad?
 sys.path.append(path.join(path.abspath(path.dirname(__file__)),'conrad'))
 
@@ -51,8 +50,8 @@ def build_test_case():
 
 
     # Prescription for each structure
-    rx = [{'label': lab_tum, 'name': 'tumor', 'is_target': True,  'dose': 1., 'constraints': None},
-          {'label': lab_oar, 'name': 'oar',   'is_target': False, 'dose': 0., 'constraints': None}]
+    rx = [{'label': lab_tum, 'name': 'tumor', 'is_target': True,  'dose': 1., 'constraints': ['D95 > 0.9Gy']},
+          {'label': lab_oar, 'name': 'oar',   'is_target': False, 'dose': 0., 'constraints': ['D50 < 0.4Gy']}]
 
 
     # dose matrix
@@ -111,8 +110,8 @@ login_sessions_lock = Lock()
 #TODO: case checkout?
 #TODO: Set up database to store problem info
 #TODO: Get (from database) list of cases on startup.
-case_names = ['TEST CASE'];
-cases = {'TEST CASE': build_test_case()}
+case_names = [];
+cases = {}
 
 
 def __init_planning_session(uid):
@@ -209,6 +208,28 @@ def load_color_bounds():
     return jsonify(color1 = FIRSTCOLOR, color2 = LASTCOLOR)
 
 
+@app.route('/_check_session/')
+def check_session():
+    if not __verify_session(session): 
+        return jsonify(success = False, message = 'unsessioned')
+    else:
+        return jsonify(success = True, message = 'sessioned')
+
+
+@app.route('/_make_test_case/')
+def make_test_case():
+    global case_names
+    global cases
+
+    if not __verify_session(session): 
+        return jsonify(success = False, message = 'unsessioned')
+    
+    if not 'TEST CASE' in case_names:
+        case_names.append('TEST CASE')
+        cases['TEST CASE'] = build_test_case()
+
+    return jsonify(success = True)
+
 
 # API
 # ----  
@@ -230,6 +251,8 @@ def load_color_bounds():
 # get plan statistics - return dictionary{structure label, stats}
 # get prescription sat - return dictionary{structure label, (constraint, status, margin) tuple}
 #
+
+
 
 
 @app.route('/hello/')
@@ -282,9 +305,8 @@ def send_structure_info():
     cs = login_sessions[session['sid']].case
     structures = {}
     for label, s in cs.structures.iteritems():
-        structures[l] = {'name': s.name}
+        structures[label] = {'name': s.name, 'is_target': s.is_target}
     return jsonify(success = True, structures = structures)
-
 
 # get all plotting data (all structures)
 @app.route('/_plotting_data/')
@@ -293,11 +315,19 @@ def send_plotting_data():
         return jsonify(success = False, message = 'unsessioned')
 
     cs = login_sessions[session['sid']].case
-    structures = {}
-    for label, s in cs.structures.iteritems():
-        structures[l] = {'name': s.name}
-    return jsonify(success = True, plottingData = cs.plotting_data)
+    return jsonify(success = True, 
+        plottingData = cs.plotting_data_json_serializable)
 
+
+# get constraint plotting data (all structures)
+@app.route('/_constraint_data/')
+def send_constraint_data():
+    if not __verify_session(session): 
+        return jsonify(success = False, message = 'unsessioned')
+
+    cs = login_sessions[session['sid']].case
+    return jsonify(success = True, 
+        constraintData = cs.plotting_data_constraints_only)
 
 # add DVH constraint - return ID
 @app.route('/_add_dvh_constraint/')
@@ -343,7 +373,7 @@ def change_dvh_constraint():
     fraction = json_dict.pop('fraction', None)
     direction = json_dict.pop('direction', None)
 
-    if not val.validate_constraint_ID(cid):
+    if not val.validate_constraintID(cid):
         return jsonify(success = False, message = "invalid constraintID")
 
     valinfo = val.validate_dvh_constraint(dose, percentile, fraction, direction)
@@ -366,7 +396,7 @@ def drop_dvh_constraint():
     val = login_sessions[session['sid']].validator
     json_dict = request.get_json()
     cid = json_dict.pop('constraintID', None)
-    if not val.validate_constraint_ID(cid):
+    if not val.validate_constraintID(cid):
         return jsonify(success = False, message = "invalid constraintID")
     else:
         cs.drop_dvh_constraint(cid)
@@ -398,7 +428,8 @@ def add_all_rx_constraints():
     cid_list = cs.add_all_rx_constraints()
     return jsonify(success = True, constraintIDList = cid_list)
 
-@app.route('/_change_objective')
+
+@app.route('/_change_objective/')
 def change_objective():
     if not __verify_session(session): 
         return jsonify(success = False, message = 'unsessioned')
@@ -410,6 +441,7 @@ def change_objective():
     label = json_dict.pop('structureLabel', None)
 
     label = val.validate_structure_label(label)
+
     if isinstance(label, dict):
         return jsonify(success = False, message = label['message'])
 
@@ -417,7 +449,7 @@ def change_objective():
     w_under = json_dict.pop('w_under', None)
     w_over = json_dict.pop('w_over', None)
 
-    valinfo = val.validate_objective(dose, w_under, w_over)
+    valinfo = val.validate_objective(label, dose, w_under, w_over)
     if not valinfo['valid']:
         return jsonify(success = False, message = valinfo['message'])
     else:
@@ -425,13 +457,40 @@ def change_objective():
             valinfo['w_under'], valinfo['w_over'])
         return jsonify(success = True)
 
+@app.route('/_objectives/')
+def send_objectives():
+    if not __verify_session(session): 
+        return jsonify(success = False, message = 'unsessioned')
 
-@app.route('/_run_optimization')
+    cs = login_sessions[session['sid']].case    
+    return jsonify(success = True, objectives = cs.objective_data)
+
+@app.route('/_single_objective/')
+def send_single_objective():
+    if not __verify_session(session): 
+        return jsonify(success = False, message = 'unsessioned')
+
+    cs = login_sessions[session['sid']].case    
+    val = login_sessions[session['sid']].validator
+    json_dict = request.get_json()
+
+    label = json_dict.pop('structureLabel', None)
+    label = val.validate_structure_label(label)
+
+    if isinstance(label, dict):
+        return jsonify(success = False, message = label['message'])
+
+    return jsonify(success = True, 
+        objectives = cs.get_objective_by_label(label))
+
+
+@app.route('/_run_optimization/')
 def run_optimization():
     if not __verify_session(session): 
         return jsonify(success = False, message = 'unsessioned')
 
     cs = login_sessions[session['sid']].case
+    val = login_sessions[session['sid']].validator
     json_dict = request.get_json()
 
     use_2pass = json_dict.pop('use_2pass', False)
@@ -448,7 +507,8 @@ def run_optimization():
 
         return jsonify(success = True, status = info['status'], 
             objective = info['objective'], 
-            time = info['time'], iterations = info['iterations'])
+            time = info['time'], iterations = info['iters'], 
+            feasible = cs.feasible)
 
 @app.route('/_plan_statistics')
 def get_plan_statistics():

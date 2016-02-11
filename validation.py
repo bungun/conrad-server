@@ -1,3 +1,9 @@
+import sys
+from os import path
+
+# TODO: eventually replace conrad submodule with installed conrad?
+sys.path.append(path.join(path.abspath(path.dirname(__file__)),'conrad'))
+
 from conrad.defs import SOLVER_OPTIONS, MAX_VERBOSITY
 
 class InputValidator(object):
