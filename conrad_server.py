@@ -179,22 +179,26 @@ def create_account():
     return jsonify(success = success, message = message)
 
 
-@app.route('/login/')
+@app.route('/login/', methods = ['GET', 'POST'])
 def login():
+    global users, passwords
     success = False
-    message = 'GET call required'
-    if request.method == 'GET':
-        json_dict = request.get_json()
-        uid = json_dict.pop('username', '')
-        if uid != app.config['USERNAME']:
-            message = 'Invalid username'
-        elif json_dict.pop('password', '') != app.config['PASSWORD']:
-            message = 'Invalid password'
-        else:
-            session['logged_in'] = True
-            __init_planning_session(uid)
-            message = 'You were logged in'
-            success = True
+    json_dict = request.get_json()
+    if json_dict is None:
+        json_dict = {}
+        json_dict['username'] = request.args.get('username', '', type = str)
+        json_dict['password'] = request.args.get('password', '', type = str)
+
+    uid = json_dict.pop('username', '')
+    if uid not in users:
+        message = 'Invalid username'
+    elif json_dict.pop('password', '') != passwords[uid]:
+        message = 'Invalid password'
+    else:
+        session['logged_in'] = True
+        __init_planning_session(uid)
+        message = 'You were logged in'
+        success = True
     return jsonify(success = success, message = message)
 
 @app.route('/logout/')
@@ -262,7 +266,19 @@ def hello(name = None):
 # TODO - provide api upon request
 @app.route('/api/')
 def send_api():
-    return jsonify(run_optimization = None)
+    api = {'getCases': '_cases/', 'setCase': '_select_case/',
+        'getStructureLabels': '_structure_labels/',
+        'getStructureInfo': '_structure_info/',
+        'plottingData': '_plotting_data/',
+        'constraintData': '_constraint_data/',
+        'addConstraint': '_add_dvh_constraint/',
+        'changeConstraint': '_change_dvh_constraint/',
+        'dropConstraint': '_drop_dvh_constraint/',
+        'changeObjective': '_change_objective/',
+        'getObjectives': '_objectives/',
+        'getSingleObjective': '_single_objective/',
+        'run': '_run_optimization'}
+    return jsonify(api)
 
 # get cases
 @app.route('/_cases/')
@@ -279,6 +295,10 @@ def select_case():
 
     s = login_sessions[session['sid']]
     json_dict = request.get_json()
+    if json_dict is None:
+        json_dict = {}
+        json_dict['case'] = request.args.get('case', '', type = str)
+
     casename = json_dict.pop('case', 'NOCASE')
     if not casename in cases:
         return jsonify(success = False, message = 'case does not exist')
@@ -366,17 +386,28 @@ def change_dvh_constraint():
     cs = login_sessions[session['sid']].case
     val = login_sessions[session['sid']].validator
     json_dict = request.get_json()
+    if json_dict is None:
+        json_dict = {}
+        json_dict['constraintID'] = request.args.get('constraintID', '', type = str)
+        json_dict['dose'] = request.args.get('dose')
+        json_dict['percentile'] = request.args.get('percentile')
+        json_dict['fraction'] = request.args.get('fraction')
+        json_dict['direction'] = request.args.get('direction')
+
 
     cid = json_dict.pop('constraintID', None)
     dose = json_dict.pop('dose', None)
     percentile = json_dict.pop('percentile', None)
     fraction = json_dict.pop('fraction', None)
     direction = json_dict.pop('direction', None)
-
+    print direction
+    print percentile
     if not val.validate_constraintID(cid):
         return jsonify(success = False, message = "invalid constraintID")
 
     valinfo = val.validate_dvh_constraint(dose, percentile, fraction, direction)
+
+    print valinfo
     if not valinfo['valid']:
         return jsonify(success = False, message = valinfo['message'])
     else:
@@ -437,9 +468,16 @@ def change_objective():
     cs = login_sessions[session['sid']].case
     val = login_sessions[session['sid']].validator
     json_dict = request.get_json()
+    if json_dict is None:
+        json_dict = {}
+        json_dict['structureLabel'] = request.args.get('structureLabel', '', type = str)
+        json_dict['dose'] = request.args.get('dose')
+        json_dict['w_under'] = request.args.get('w_under')
+        json_dict['w_over'] = request.args.get('w_over')
+
+
 
     label = json_dict.pop('structureLabel', None)
-
     label = val.validate_structure_label(label)
 
     if isinstance(label, dict):
@@ -449,7 +487,14 @@ def change_objective():
     w_under = json_dict.pop('w_under', None)
     w_over = json_dict.pop('w_over', None)
 
+    print "dose", dose, type(dose)
+    print "wover", w_over, type(w_over)
+    print "wunder", w_under, type(w_under)
+
     valinfo = val.validate_objective(label, dose, w_under, w_over)
+
+    print valinfo
+
     if not valinfo['valid']:
         return jsonify(success = False, message = valinfo['message'])
     else:
@@ -473,6 +518,10 @@ def send_single_objective():
     cs = login_sessions[session['sid']].case    
     val = login_sessions[session['sid']].validator
     json_dict = request.get_json()
+    if json_dict is None:
+        json_dict = {}
+        json_dict['structureLabel'] = request.args.get('structureLabel', '', type = str)
+
 
     label = json_dict.pop('structureLabel', None)
     label = val.validate_structure_label(label)
@@ -492,6 +541,12 @@ def run_optimization():
     cs = login_sessions[session['sid']].case
     val = login_sessions[session['sid']].validator
     json_dict = request.get_json()
+    if json_dict is None:
+        json_dict = {}
+        json_dict['use_2pass'] = request.args.get('use_2pass', False, type = bool)
+        json_dict['use_slack'] = request.args.get('use_2pass', True, type = bool)
+        json_dict['solver'] = request.args.get('solver', 'ECOS', type = str)
+        json_dict['verbose'] = request.args.get('verbose', 1, type = int)
 
     use_2pass = json_dict.pop('use_2pass', False)
     use_slack = json_dict.pop('use_slack', True)
