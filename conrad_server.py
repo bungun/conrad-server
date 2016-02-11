@@ -35,7 +35,7 @@ app.secret_key = SECRET_KEY
 
 
 # construct dummy case. TODO: load case
-def __build_test_case():
+def build_test_case():
     m_targ = 100
     m_oar = 400
     m = m_targ + m_oar
@@ -62,6 +62,8 @@ def __build_test_case():
 
     # Construct unconstrained case
     cs = Case(A, voxel_labels, label_order, rx)
+
+    return cs
 
 
 class User(object):
@@ -110,7 +112,7 @@ login_sessions_lock = Lock()
 #TODO: Set up database to store problem info
 #TODO: Get (from database) list of cases on startup.
 case_names = ['TEST CASE'];
-cases = {'TEST CASE': __build_test_case()}
+cases = {'TEST CASE': build_test_case()}
 
 
 def __init_planning_session(uid):

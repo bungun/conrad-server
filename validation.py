@@ -3,10 +3,13 @@ from conrad.defs import SOLVER_OPTIONS, MAX_VERBOSITY
 class InputValidator(object):
     def __init__(self, case):
         self.case = case
+        self.SOLVER_OPTIONS = SOLVER_OPTIONS
+        self.MAX_VERBOSITY = MAX_VERBOSITY
 
     @staticmethod
     def __str_is_float(string):
-        return all(map(lambda s: s.isdigit(), string.split('.')))
+        return string.replace('.', '').replace(
+            'e-', '').replace('e+', '').isdigit()
 
     @staticmethod
     def __boolable(argument):
@@ -28,16 +31,20 @@ class InputValidator(object):
         try:
             if label is None:
                 out['message'] += 'no label provided\n'
-            if not label.isdigit:
-                out['message'] += 'label is not integer\n'
-            else:
+            elif isinstance(label, float):
                 label = int(label)
+            elif isinstance(label, str):
+                if not label.isdigit:
+                    out['message'] += 'label is not integer\n'
+                else:
+                    label = int(label)
 
             if not label in self.case.structures:
                 out['message'] += 'label does not match a structure in case\n'
 
             # no message -> valid
             if out['message'] == '': return int(label)
+            else: return out
 
         except:
             out['valid'] = False
@@ -56,18 +63,22 @@ class InputValidator(object):
 
 
             if dose is not None:
-                if isinstance(dose, float):
-                    pass
-                elif __str_is_float(dose):
+                if isinstance(dose, (int, float)):
+                    dose = float(dose)
+                elif self.__str_is_float(dose):
                     dose = float(dose)
                 else:
                     dose = None
                     out['message'] += 'argument "dose" must be a float or None/null\n'                
+                if dose is not None:
+                    if dose < 0:
+                        out['message'] += 'argument "dose" must be in range [0, +inf)\n'                
+
 
             if percentile is not None:
-                if isinstance(percentile, float):
-                    pass
-                elif __str_is_float(percentile):
+                if isinstance(percentile, (int, float)):
+                    fraction = percentile / 100.
+                elif self.__str_is_float(percentile):
                     percentile = float(percentile)
                     fraction = percentile / 100.
                 else:
@@ -79,9 +90,9 @@ class InputValidator(object):
 
 
             elif fraction is not None:
-                if isinstance(fraction, float):
-                    pass
-                if __str_is_float(fraction):
+                if isinstance(fraction, (int, float)):
+                    fraction = float(fraction)
+                elif self.__str_is_float(fraction):
                     fraction = float(fraction)
                 else:
                     fraction = None
@@ -93,12 +104,14 @@ class InputValidator(object):
             if direction is not None:
                 if direction not in directions:
                     out['message'] += 'argument "direction must be one of {} or None/null\n'.format(directions)
+                else:
+                    direction = direction.replace('=', '')
 
             out['valid'] = out['message'] == ''
             if out['valid']:
                 out['dose'] = dose 
                 out['fraction'] = fraction
-                out['direction'] = direction.strip('=')
+                out['direction'] = direction
             return out
 
         except:
@@ -115,36 +128,50 @@ class InputValidator(object):
 
             if dose is None and w_under is None and w_over is None:
                 out['message'] += 'No changes specified\n'
-            elif self.case.structures[label].is_target and w_over is None:
+            elif not self.case.structures[label].is_target and w_over is None:
                 out['message'] += str('No changes specified: label corresponds'
-                    'to non-target structure, argument "w_over" is None')
+                    ' to non-target structure, argument "w_over" is None')
 
             if dose is not None:
-                if isinstance(dose, float):
-                    pass
-                elif __str_is_float(dose):
+                if isinstance(dose, (int, float)):
+                    dose = float(dose)
+                elif self.__str_is_float(dose):
                     dose = float(dose)
                 else:
                     dose = None
                     out['message'] += 'argument "dose" must be a float or None/null\n'                
+                if dose is not None:
+                    if dose < 0:
+                        out['message'] += 'argument "dose" must be in range [0, +inf)\n'                
+
 
             if w_under is not None:
-                if isinstance(w_under, float):
-                    pass
-                elif __str_is_float(w_under):
+                if isinstance(w_under, (int, float)):
+                    w_under = float(w_under)
+                elif self.__str_is_float(w_under):
                     w_under = float(w_under)
                 else:
                     w_under = None
                     out['message'] += 'argument "w_under" must be a float or None/null\n'                
+                if w_under is not None:
+                    if w_under < 0:
+                        out['message'] += 'argument "w_under" must be in range [0, +inf)\n'                
+
+
 
             if w_over is not None:
-                if isinstance(w_over, float):
-                    pass
-                elif __str_is_float(w_over):
+                if isinstance(w_over, (int, float)):
+                    w_over = float(w_over)
+                elif self.__str_is_float(w_over):
                     w_over = float(w_over)
                 else:
                     w_over = None
                     out['message'] += 'argument "w_over" must be a float or None/null\n'                
+                if w_over is not None:
+                    if w_over < 0:
+                        out['message'] += 'argument "w_over" must be in range [0, +inf)\n'                
+
+
 
             out['valid'] = out['message'] == ''
             if out['valid']:
@@ -161,24 +188,24 @@ class InputValidator(object):
     def validate_solve(self, use_2pass, use_slack, solver, verbose):
         out = {'valid': True, 'message': ''}
         try: 
-            if not __boolable(use_2pass):
+            if not self.__boolable(use_2pass):
                 out['message'] += 'argument "use_2pass" must be convertable to bool\n'
             else:
                 use_2pass = bool(use_2pass)
 
-            if not __boolable(use_slack):
+            if not self.__boolable(use_slack):
                 out['message'] += 'argument "use_slack" must be convertable to bool\n'
             else:
                 use_slack = bool(use_slack)
 
-            if not solver in SOLVER_OPTIONS:
+            if not solver in self.SOLVER_OPTIONS:
                 out['message'] += 'argument "solver" must be one of: {}\n'.format(SOLVER_OPTIONS)
 
             if verbose in ('true', 'True'): verbose = 1
-            elif verbosein ('false', 'False'): verbose = 0
-            if not __intable(verbose):
+            elif verbose in ('false', 'False'): verbose = 0
+            if not self.__intable(verbose):
                 out['message'] += 'argument "verbose" must be convertable to int\n'
-            verbose = min(verbose, MAX_VERBOSITY)
+            verbose = min(int(float(verbose)), self.MAX_VERBOSITY)
 
 
             out['valid'] = out['message'] == ''
@@ -186,7 +213,7 @@ class InputValidator(object):
                 out['use_2pass'] = use_2pass 
                 out['use_slack'] = use_slack
                 out['solver'] = solver 
-                out['verbose'] = w_over
+                out['verbose'] = verbose
             return out
 
         except: 
